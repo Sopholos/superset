@@ -410,6 +410,10 @@ class Dashboard(Model, AuditMixinNullable, ImportExportMixin):
             # remove ids and relations (like owners, created by, slices, ...)
             copied_dashboard = dashboard.copy()
             for slc in dashboard.slices:
+                if slc.datasource is None:
+                    logger.info("slc.datasource is none")
+                    continue
+
                 datasource_ids.add((slc.datasource_id, slc.datasource_type))
                 copied_slc = slc.copy()
                 # save original id into json
@@ -426,19 +430,22 @@ class Dashboard(Model, AuditMixinNullable, ImportExportMixin):
                 slices = copied_dashboard.__dict__.setdefault("slices", [])
                 slices.append(copied_slc)
 
-            json_metadata = json.loads(dashboard.json_metadata)
-            native_filter_configuration: list[dict[str, Any]] = json_metadata.get(
-                "native_filter_configuration", []
-            )
-            for native_filter in native_filter_configuration:
-                for target in native_filter.get("targets", []):
-                    id_ = target.get("datasetId")
-                    if id_ is None:
-                        continue
-                    datasource = DatasourceDAO.get_datasource(
-                        db.session, utils.DatasourceType.TABLE, id_
-                    )
-                    datasource_ids.add((datasource.id, datasource.type))
+            if dashboard.json_metadata is None:
+                logger.info("dashboard.json_metadata is None")
+            else:
+                json_metadata = json.loads(dashboard.json_metadata)
+                native_filter_configuration: list[dict[str, Any]] = json_metadata.get(
+                    "native_filter_configuration", []
+                )
+                for native_filter in native_filter_configuration:
+                    for target in native_filter.get("targets", []):
+                        id_ = target.get("datasetId")
+                        if id_ is None:
+                            continue
+                        datasource = DatasourceDAO.get_datasource(
+                            db.session, utils.DatasourceType.TABLE, id_
+                        )
+                        datasource_ids.add((datasource.id, datasource.type))
 
             copied_dashboard.alter_params(remote_id=dashboard_id)
             copied_dashboards.append(copied_dashboard)
